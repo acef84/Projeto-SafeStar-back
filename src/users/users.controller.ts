@@ -1,45 +1,51 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { User } from '@prisma/client';
+import { JwtService } from '@nestjs/jwt'; 
 import * as bcrypt from 'bcrypt';
+import { CreateUserDto } from './dto/create-user.dto';
+import { LoginDto } from './dto/login.dto';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+  ) {}
 
-  @Post('register') // Rota específica para registro
-  async register(@Body() createUserDto: { name: string; email: string; password: string }): Promise<User> {
+  @Post('register') // Rota para registro de usuário
+  async register(@Body() createUserDto: CreateUserDto): Promise<any> {
     try {
-      // Criptografar a senha antes de salvar
-      const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-      return this.usersService.create({ ...createUserDto, password: hashedPassword });
+      const user = await this.usersService.create(createUserDto);
+      
+      // Gera o token para o novo usuário
+      const payload = { email: user.email, sub: user.id };
+      const token = this.jwtService.sign(payload);
+
+      // Retorna uma resposta sem a senha
+      const { password, ...userWithoutPassword } = user;
+      return { message: 'Usuário registrado com sucesso!', user: userWithoutPassword, token };
     } catch (error) {
       throw new BadRequestException('Erro ao cadastrar usuário');
     }
   }
 
-  @Post() // Rota para criação genérica, se necessário
-  create(@Body() createUserDto: { name: string; email: string; password: string }): Promise<User> {
-    return this.usersService.create(createUserDto);
-  }
+  @Post('login') 
+  async login(@Body() loginDto: LoginDto): Promise<any> {
+    const { email, password } = loginDto;
 
-  @Get()
-  findAll(): Promise<User[]> {
-    return this.usersService.findAll();
-  }
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new BadRequestException('Credenciais inválidas. Tente novamente.');
+    }
 
-  @Get(':id')
-  findOne(@Param('id') id: string): Promise<User> {
-    return this.usersService.findOne(Number(id));
-  }
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new BadRequestException('Credenciais inválidas. Tente novamente.');
+    }
 
-  @Put(':id')
-  update(@Param('id') id: string, @Body() updateUserDto: Partial<{ name: string; email: string; password: string }>): Promise<User> {
-    return this.usersService.update(Number(id), updateUserDto);
-  }
+    const payload = { email: user.email, sub: user.id };
+    const token = this.jwtService.sign(payload);
 
-  @Delete(':id')
-  remove(@Param('id') id: string): Promise<User> {
-    return this.usersService.remove(Number(id));
+    return { message: 'Login bem-sucedido!', token };
   }
 }

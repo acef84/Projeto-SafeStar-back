@@ -3,12 +3,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
-  // Habilitando CORS para qualquer origem (para teste)
-  app.enableCors({
-    origin: '*', // Permite qualquer origem (para teste)
-  });
-
+  app.enableCors();  // Adicione esta linha para habilitar o CORS
   await app.listen(3000);
 }
 bootstrap();
